@@ -1,0 +1,14 @@
+# python / build junk
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# venvs and local env
+.venv/
+.env
+
+# vcs / os
+.git/
+.DS_Store
