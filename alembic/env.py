@@ -4,19 +4,15 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# позволяваме import от app/
+# allow imports from app/
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.config import settings
 from app.models import Base
 
-# Alembic Config
 config = context.config
-
-# подаваме URL динамично от .env вместо от alembic.ini
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
-# логване
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
