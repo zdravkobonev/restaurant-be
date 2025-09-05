@@ -8,4 +8,3 @@ docker build -t "$IMAGE" .
 
 # push към GHCR
 docker push "$IMAGE"
-sssss
