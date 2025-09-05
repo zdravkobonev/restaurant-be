@@ -1,7 +1,7 @@
-# Organization backoffice
+# CloudTouchSale
 
 TAG=$(cat VERSION)
-IMAGE="ghcr.io/zdravkobonev/organization-be:$TAG"
+IMAGE="ghcr.io/zdravkobonev/restaurant-be:$TAG"
 
 # билд на новия образ
 docker build -t "$IMAGE" .
