@@ -1,8 +1,8 @@
-"""init
+"""initial restaurant migration
 
-Revision ID: b8bfcda02a6e
+Revision ID: 0ff2a0381029
 Revises: 
-Create Date: 2025-09-02 23:25:22.556982
+Create Date: 2025-09-05 13:54:20.458916
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'b8bfcda02a6e'
+revision: str = '0ff2a0381029'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
