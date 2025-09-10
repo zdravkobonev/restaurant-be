@@ -6,6 +6,7 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 class LoginOut(BaseModel):
-    success: bool
-    message: str
+    access_token: str
+    token_type: str = "bearer"
+    roles: list[str] = []
 

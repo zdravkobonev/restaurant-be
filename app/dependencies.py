@@ -5,7 +5,7 @@ from sqlalchemy import select
 import jwt
 
 from .db import get_db
-from .models import Admin
+from .models import User
 from .config import settings
 
 bearer_scheme = HTTPBearer()
@@ -23,7 +23,7 @@ def get_current_user(
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = db.scalar(select(Admin).where(Admin.username == username))
+    user = db.scalar(select(User).where(User.username == username))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 

@@ -1,12 +1,21 @@
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import Integer, String, DateTime, func
-from sqlalchemy.orm import Mapped, mapped_column
+from typing import Optional, List
+from sqlalchemy import Integer, String, DateTime, func, Table, Column, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
-class Admin(Base):
-    __tablename__ = "admins"
+# Association table for many-to-many User <-> Role
+user_roles = Table(
+    "user_roles",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
+    Column("role_id", Integer, ForeignKey("roles.id"), primary_key=True),
+)
+
+
+class User(Base):
+    __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
@@ -17,3 +26,20 @@ class Admin(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    # Roles assigned to this user (many-to-many)
+    roles: Mapped[List["Role"]] = relationship("Role", secondary=user_roles, back_populates="users")
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
+    parent_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("roles.id"), nullable=True)
+
+    # children sub-roles
+    children: Mapped[List["Role"]] = relationship("Role", backref="parent", remote_side=[id])
+
+    # users that have this role
+    users: Mapped[List[User]] = relationship("User", secondary=user_roles, back_populates="roles")

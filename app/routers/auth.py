@@ -4,17 +4,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Admin
-from ..schemas import LoginIn
+from ..models import User
+from ..schemas import LoginIn, LoginOut
 from ..security import verify_password, create_access_token
 from ..config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/login")
+@router.post("/login", response_model=LoginOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)):
     # 1) Търсим потребителя
-    user = db.scalar(select(Admin).where(Admin.username == payload.username))
+    user = db.scalar(select(User).where(User.username == payload.username))
 
     now = datetime.now(timezone.utc)
     if user and user.locked_until and user.locked_until > now:
@@ -37,7 +37,9 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
 
         # Създаваме JWT
         access_token = create_access_token(data={"sub": user.username})
-        return {"access_token": access_token, "token_type": "bearer"}
+        # collect role names
+        role_names = [r.name for r in (user.roles or [])]
+        return {"access_token": access_token, "token_type": "bearer", "roles": role_names}
     else:
         # Неуспешен логин
         if user:
