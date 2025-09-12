@@ -12,7 +12,8 @@ class LoginIn(BaseModel):
 class LoginOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    roles: List[str] = []
+    # roles returned grouped by parent: [{parentId: int, roles: [ids]}]
+    roles: List["RolesGroupedOut"] = []
 
 
 # Roles
@@ -23,6 +24,19 @@ class RoleOut(BaseModel):
 
 class RoleNestedOut(RoleOut):
     children: List["RoleNestedOut"] = []
+
+
+# Role representation returned on login: includes id, parent_id and child ids
+class RoleLoginOut(BaseModel):
+    id: int
+    parent_id: Optional[int] = None
+    children: List[int] = Field(default_factory=list)
+
+
+# Grouped roles used in login response
+class RolesGroupedOut(BaseModel):
+    parentId: Optional[int] = None
+    roles: List[int] = Field(default_factory=list)
 
 
 # Users
@@ -46,4 +60,6 @@ class UserUpdateRoles(BaseModel):
 
 # Pydantic forward refs
 RoleNestedOut.update_forward_refs()
+LoginOut.update_forward_refs()
+RolesGroupedOut.update_forward_refs()
 

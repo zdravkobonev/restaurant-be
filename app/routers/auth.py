@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import User
-from ..schemas import LoginIn, LoginOut
+from ..schemas import LoginIn, LoginOut, RoleLoginOut, RolesGroupedOut
 from ..security import verify_password, create_access_token
 from ..config import settings
 
@@ -34,12 +34,19 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
         user.locked_until = None
         db.add(user)
         db.commit()
+        db.refresh(user)
 
         # Създаваме JWT
         access_token = create_access_token(data={"sub": user.username})
-        # collect role names
-        role_names = [r.name for r in (user.roles or [])]
-        return {"access_token": access_token, "token_type": "bearer", "roles": role_names}
+        # Build grouped roles: parent_id -> list of role ids
+        grouped: dict[int | None, list[int]] = {}
+        for r in (user.roles or []):
+            pid = r.parent_id
+            grouped.setdefault(pid, []).append(r.id)
+
+        roles_grouped = [RolesGroupedOut(parentId=pid, roles=ids).dict() for pid, ids in grouped.items()]
+
+        return {"access_token": access_token, "token_type": "bearer", "roles": roles_grouped}
     else:
         # Неуспешен логин
         if user:
