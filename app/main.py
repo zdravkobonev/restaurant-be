@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import auth
+from .routers import auth, users
 
 
 def _split_csv_or_jsonish(s: str) -> List[str]:
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(auth.router)
+    app.include_router(users.router)
 
     @app.get("/health")
     def health():
