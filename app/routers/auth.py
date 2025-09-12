@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +10,7 @@ from ..models import User
 from ..schemas import LoginIn, LoginOut, RoleLoginOut, RolesGroupedOut
 from ..security import verify_password, create_access_token
 from ..config import settings
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -61,3 +64,14 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password."
         )
+
+
+@router.get("/user-roles", response_model=List[RolesGroupedOut])
+def get_user_roles(user: User = Depends(get_current_user)):
+    """Return roles for the authenticated user only, grouped by parentId."""
+    grouped: dict[int | None, list[int]] = {}
+    for r in (user.roles or []):
+        pid = r.parent_id
+        grouped.setdefault(pid, []).append(r.id)
+
+    return [RolesGroupedOut(parentId=pid, roles=ids) for pid, ids in grouped.items()]
