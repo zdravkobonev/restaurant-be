@@ -17,20 +17,8 @@ def main():
     password = os.getenv("ADMIN_PASSWORD") or getpass.getpass("Admin password: ")
 
     with Session(engine) as db:
-        # Clear existing user-role associations and remove old roles
-        # We do not modify schema; we detach roles from users and delete Role rows.
-        users = db.scalars(select(User)).all()
-        for u in users:
-            if u.roles:
-                u.roles = []
-                db.add(u)
-        db.flush()
-
-        # delete all existing roles
-        existing_roles = db.scalars(select(Role)).all()
-        for r in existing_roles:
-            db.delete(r)
-        db.flush()
+        # Idempotent seed: do not delete existing roles or user-role relations.
+        # Instead, ensure each default role exists and create it if missing.
 
         def get_or_create_role(name, parent=None):
             # create a role with optional parent (parent can be Role or id)
@@ -38,85 +26,115 @@ def main():
             if r:
                 return r
 
+            pid = None
             if isinstance(parent, int):
-                r = Role(name=name, parent_id=parent)
-            elif parent is None:
-                r = Role(name=name)
-            else:
-                r = Role(name=name, parent=parent)
+                pid = parent
+            elif parent is not None and hasattr(parent, "id"):
+                pid = parent.id
 
+            r = Role(name=name, parent_id=pid)
             db.add(r)
             db.flush()
             return r
 
-        # New roles and sub-roles as requested
-        # Маркиране
-        m = get_or_create_role("Маркиране")
-        m_mark = get_or_create_role("маркиране", parent=m.id)
-        m_pay = get_or_create_role("приемане на плащания", parent=m.id)
-        m_open = get_or_create_role("откриване на сметка", parent=m.id)
-        m_close = get_or_create_role("закриване на сметка", parent=m.id)
-        m_void = get_or_create_role("сторниране", parent=m.id)
+        # Deterministic role spec: (expected_id, name, parent_expected_id)
+        roles_spec = [
+            (1, "Маркиране", None),
+            (2, "маркиране", 1),
+            (3, "приемане на плащания", 1),
+            (4, "откриване на сметка", 1),
+            (5, "закриване на сметка", 1),
+            (6, "сторниране", 1),
 
-        # Конфигурация
-        cfg = get_or_create_role("Конфигурация")
-        cfg_menu = get_or_create_role("конфигурации на меню", parent=cfg.id)
-        cfg_sys = get_or_create_role("системна конфигурация", parent=cfg.id)
+            (7, "Конфигурация", None),
+            (8, "конфигурации на меню", 7),
+            (9, "системна конфигурация", 7),
 
-        # Монитори
-        monitors = get_or_create_role("Монитори")
-        mon_bar = get_or_create_role("монитор на бар", parent=monitors.id)
-        mon_kitchen = get_or_create_role("монитор на кухня", parent=monitors.id)
-        mon_deliveries = get_or_create_role("монитор на доставки", parent=monitors.id)
+            (10, "Монитори", None),
+            (11, "монитор на бар", 10),
+            (12, "монитор на кухня", 10),
+            (13, "монитор на доставки", 10),
 
-        # Справки
-        reports = get_or_create_role("Справки")
-        rep_sales = get_or_create_role("отчет продажби", parent=reports.id)
-        rep_payments = get_or_create_role("отчет за плащания", parent=reports.id)
-        rep_items = get_or_create_role("отчет за артикули", parent=reports.id)
-        rep_staff = get_or_create_role("отчет за служители", parent=reports.id)
+            (14, "Справки", None),
+            (15, "отчет продажби", 14),
+            (16, "отчет за плащания", 14),
+            (17, "отчет за артикули", 14),
+            (18, "отчет за служители", 14),
 
-        # Резервации
-        reservations = get_or_create_role("Резервации")
-        res_create = get_or_create_role("създаване на резервация", parent=reservations.id)
-        res_view = get_or_create_role("преглед на резервации", parent=reservations.id)
+            (19, "Резервации", None),
+            (20, "създаване на резервация", 19),
+            (21, "преглед на резервации", 19),
 
-        # Складова база
-        warehouse = get_or_create_role("Складова база")
-        wh_receive = get_or_create_role("приемане на стока", parent=warehouse.id)
-        wh_view = get_or_create_role("преглед на наличности", parent=warehouse.id)
+            (22, "Складова база", None),
+            (23, "приемане на стока", 22),
+            (24, "преглед на наличности", 22),
 
-        # Доставки
-        deliveries = get_or_create_role("Доставки")
-        del_create = get_or_create_role("създаване на доставка", parent=deliveries.id)
-        del_view = get_or_create_role("преглед на доставки", parent=deliveries.id)
+            (25, "Доставки", None),
+            (26, "създаване на доставка", 25),
+            (27, "преглед на доставки", 25),
 
-        # Отстъпки
-        discounts = get_or_create_role("Отстъпки")
-        disc_create = get_or_create_role("създаване на отстъпка", parent=discounts.id)
-        disc_view = get_or_create_role("преглед на отстъпки", parent=discounts.id)
+            (28, "Отстъпки", None),
+            (29, "създаване на отстъпка", 28),
+            (30, "преглед на отстъпки", 28),
+        ]
 
-        # Determine role to grant to admin: choose first top-level group's first child
-        assigned_role = m_mark
+        # Create roles in order, trying to assign expected id when available and free.
+        created_roles = {}
+        for expected_id, name, parent_expected in roles_spec:
+            # if role with this name exists -> keep it
+            existing = db.scalar(select(Role).where(Role.name == name))
+            if existing:
+                created_roles[expected_id] = existing
+                continue
+
+            # ensure parent exists and resolve its id
+            parent_id = None
+            if parent_expected is not None:
+                # parent should have been created earlier in the loop
+                parent = created_roles.get(parent_expected) or db.scalar(select(Role).where(Role.id == parent_expected))
+                if parent:
+                    parent_id = parent.id
+
+            # check if expected_id is free
+            id_taken = db.scalar(select(Role).where(Role.id == expected_id))
+            if id_taken:
+                # cannot force id, create normally
+                r = Role(name=name, parent_id=parent_id)
+            else:
+                r = Role(id=expected_id, name=name, parent_id=parent_id)
+
+            db.add(r)
+            db.flush()
+            created_roles[expected_id] = r
+
+        # Assign to admin all roles that are child roles (parent_id is not NULL)
+        # First, ensure all roles have been created by the get_or_create_role calls above.
+
+        # fetch all roles that are children (parent_id not null)
+        child_roles = db.scalars(select(Role).where(Role.parent_id.isnot(None))).all()
 
         user = db.scalar(select(User).where(User.username == username))
         if user:
-            # update existing user's roles
-            user.roles = [assigned_role]
+            # append any missing child roles to existing user
+            existing_role_ids = {r.id for r in (user.roles or [])}
+            for r in child_roles:
+                if r.id not in existing_role_ids:
+                    user.roles.append(r)
             # update password only if ADMIN_PASSWORD env provided
             if os.getenv("ADMIN_PASSWORD"):
                 user.password_hash = hash_password(password)
             db.add(user)
             db.commit()
-            print(f"User '{username}' exists — roles updated to '{assigned_role.name}'.")
+            print(f"User '{username}' exists — ensured {len(child_roles)} child roles assigned.")
             return
 
-        # Create new admin user and assign role
+        # Create new admin user and assign all child roles
         user = User(username=username, password_hash=hash_password(password))
-        user.roles.append(assigned_role)
+        for r in child_roles:
+            user.roles.append(r)
         db.add(user)
         db.commit()
-        print(f"User '{username}' created with role '{assigned_role.name}'.")
+        print(f"User '{username}' created with {len(child_roles)} child roles assigned.")
 
 if __name__ == "__main__":
     main()
